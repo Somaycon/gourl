@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"time"
 
 	"github.com/Somaycon/gourl.git/internal/handler"
 	"github.com/Somaycon/gourl.git/internal/model"
@@ -15,14 +16,26 @@ import (
 )
 
 func main() {
-	err := godotenv.Load()
+	_ = godotenv.Load()
+	dsn := os.Getenv("DSN")
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
-	dsn := os.Getenv("DSN")
 
-	db, _ := gorm.Open(postgres.Open(dsn))
-	db.AutoMigrate(&model.Url{})
+	if err := db.AutoMigrate(&model.Url{}); err != nil {
+		panic("Falha ao executar AutoMigrate: " + err.Error())
+	}
+
+	postgresDB, err := db.DB()
+	if err != nil {
+		panic("Falha ao obter *sql.DB: " + err.Error())
+	}
+
+	postgresDB.SetMaxIdleConns(10)
+	postgresDB.SetMaxOpenConns(100)
+	postgresDB.SetConnMaxLifetime(5 * time.Minute)
 
 	rdb := redis.NewClient(&redis.Options{
 		Addr: os.Getenv("REDIS_ADDR"),

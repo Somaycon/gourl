@@ -51,8 +51,7 @@ func (s *UrlService) Shorten(ctx context.Context, originalUrl string) (*model.Ur
 func (s *UrlService) GetOrininalUrl(ctx context.Context, code string) (string, error) {
 	cachedUrl, err := s.repo.GetCache(ctx, code)
 	if err == nil {
-		go s.repo.GetCache(ctx, code)
-		s.repo.IncrementClicks(code)
+		go s.repo.IncrementClicks(code)
 		return cachedUrl, nil
 	}
 
