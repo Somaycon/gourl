@@ -5,9 +5,11 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -39,6 +41,10 @@ func main() {
 	}
 
 	db.AutoMigrate(&Url{})
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: os.Getenv("REDIS_ADDR"),
+	})
 
 	r := gin.Default()
 
@@ -83,11 +89,22 @@ func main() {
 
 	r.GET("/:short", func(ctx *gin.Context) {
 		short := ctx.Param("short")
+		reqCtx := ctx.Request.Context()
+		cachedUrl, err := rdb.Get(reqCtx, short).Result()
+		if err == nil {
+			go func(code string) {
+				db.Model(&Url{}).Where("code = ?", code).UpdateColumn("clicks", gorm.Expr("clicks + ?", 1))
+			}(short)
+			ctx.Redirect(http.StatusFound, cachedUrl)
+			return
+		}
+
 		var url Url
 		if err := db.Where("code = ?", short).First(&url).Error; err != nil {
 			ctx.String(http.StatusNotFound, "url not found")
 			return
 		}
+		rdb.Set(ctx, short, url.Url, 24*time.Hour)
 		db.Model(&url).UpdateColumn("clicks", gorm.Expr("clicks + ?", 1))
 		ctx.Redirect(http.StatusFound, url.Url)
 	})
