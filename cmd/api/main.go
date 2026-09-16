@@ -68,6 +68,16 @@ func main() {
 		ctx.JSON(http.StatusOK, newUrl.ShortUrl)
 	})
 
+	r.GET("/:short", func(ctx *gin.Context) {
+		short := ctx.Param("short")
+		var url Url
+		if err := db.Where("code = ?", short).First(&url).Error; err != nil {
+			ctx.String(http.StatusNotFound, "url not found")
+			return
+		}
+		ctx.Redirect(http.StatusFound, url.Url)
+	})
+
 	r.Run()
 }
 
