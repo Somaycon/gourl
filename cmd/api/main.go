@@ -50,6 +50,13 @@ func main() {
 			ctx.String(http.StatusInternalServerError, err.Error())
 			return
 		}
+		if err := db.Where("code = ?", code).First(&Url{}).Error; err == nil {
+			code, err = GenerateCode(6)
+			if err != nil {
+				ctx.String(http.StatusInternalServerError, err.Error())
+				return
+			}
+		}
 		shortUrl := os.Getenv("BASE_URL") + code
 
 		newUrl := Url{
