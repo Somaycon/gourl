@@ -15,5 +15,10 @@ func main() {
 		})
 	})
 
+	r.POST("/url", func(ctx *gin.Context) {
+		url := ctx.DefaultQuery("url", "url")
+		ctx.String(http.StatusOK, url)
+	})
+
 	r.Run()
 }
