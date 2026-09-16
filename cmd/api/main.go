@@ -13,10 +13,15 @@ import (
 )
 
 type Url struct {
-	*gorm.Model
-	Code     string `json:"code"`
-	ShortUrl string `json:"short_url"`
+	gorm.Model
+	Code     string `json:"code" gorm:"uniqueIndex"`
+	ShortUrl string `json:"short_url" binding:"required, url"`
 	Url      string `json:"url"`
+	Clicks   int    `gorm:"default:0" json:"clicks"`
+}
+
+type UrlRequest struct {
+	Url string `json:"url"`
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -44,17 +49,25 @@ func main() {
 	})
 
 	r.POST("/url", func(ctx *gin.Context) {
-		url := ctx.DefaultQuery("url", "url")
-		code, err := GenerateCode(6)
-		if err != nil {
-			ctx.String(http.StatusInternalServerError, err.Error())
+		var request UrlRequest
+		if err := ctx.ShouldBindJSON(&request); err != nil {
+			ctx.String(http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := db.Where("code = ?", code).First(&Url{}).Error; err == nil {
-			code, err = GenerateCode(6)
+		var code string
+
+		for {
+			generated, err := GenerateCode(6)
 			if err != nil {
-				ctx.String(http.StatusInternalServerError, err.Error())
-				return
+				ctx.JSON(http.StatusInternalServerError, gin.H{
+					"error": "Error to generate code",
+				})
+			}
+			var count int64
+			db.Model(&Url{}).Where("code = ?", generated).Count(&count)
+			if count == 0 {
+				code = generated
+				break
 			}
 		}
 		shortUrl := os.Getenv("BASE_URL") + code
@@ -62,7 +75,7 @@ func main() {
 		newUrl := Url{
 			Code:     code,
 			ShortUrl: shortUrl,
-			Url:      url,
+			Url:      request.Url,
 		}
 		db.Create(&newUrl)
 		ctx.JSON(http.StatusOK, newUrl.ShortUrl)
@@ -75,6 +88,7 @@ func main() {
 			ctx.String(http.StatusNotFound, "url not found")
 			return
 		}
+		db.Model(&url).UpdateColumn("clicks", gorm.Expr("clicks + ?", 1))
 		ctx.Redirect(http.StatusFound, url.Url)
 	})
 
