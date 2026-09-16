@@ -4,18 +4,37 @@ import (
 	"crypto/rand"
 	"math/big"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type Url struct {
-	Code string `json:"code"`
-	Url  string `json:"url"`
+	*gorm.Model
+	Code     string `json:"code"`
+	ShortUrl string `json:"short_url"`
+	Url      string `json:"url"`
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		panic(err)
+	}
+	dsn := os.Getenv("DSN")
+
+	db, err := gorm.Open(postgres.Open(dsn))
+	if err != nil {
+		panic(err)
+	}
+
+	db.AutoMigrate(&Url{})
+
 	r := gin.Default()
 
 	r.GET("/ping", func(ctx *gin.Context) {
@@ -31,12 +50,15 @@ func main() {
 			ctx.String(http.StatusInternalServerError, err.Error())
 			return
 		}
+		shortUrl := os.Getenv("BASE_URL") + code
 
 		newUrl := Url{
-			Code: code,
-			Url:  url,
+			Code:     code,
+			ShortUrl: shortUrl,
+			Url:      url,
 		}
-		ctx.JSON(http.StatusOK, newUrl)
+		db.Create(&newUrl)
+		ctx.JSON(http.StatusOK, newUrl.ShortUrl)
 	})
 
 	r.Run()
